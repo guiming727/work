@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大肥鱼的终极物理模拟器 (箭头加强版)</title>
+    <style>
+        body { 
+            background-color: #f0f4f8; 
+            font-family: 'Segoe UI', sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start; 
+            min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+            overflow-y: auto; overflow-x: auto;
+        }
+        #container { 
+            background-color: white; border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+            padding: 20px; display: flex; flex-wrap: wrap; gap: 20px; 
+            justify-content: center; max-width: 1050px;
+        }
+        canvas { 
+            border-radius: 10px; background-color: #fafafa; 
+            border: 2px solid #e0e0e0; cursor: grab; 
+            max-width: 100%; height: auto;
+        }
+        canvas:active { cursor: grabbing; }
+        #controls { 
+            width: 320px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 5px; }
+        .control-group label { font-weight: bold; color: #333; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+        .control-group input[type="range"] { width: 100%; cursor: pointer; }
+        .unit-row { display: flex; gap: 5px; align-items: center; margin-top: 2px; }
+        .unit-row select { padding: 2px 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; cursor: pointer; outline: none; }
+        
+        #stats { background-color: #f8f9fa; border-radius: 8px; padding: 10px; font-size: 12px; font-family: monospace; border: 1px solid #e0e0e0; line-height: 1.6; margin-top: 5px; }
+        button { padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        button:hover { background-color: #0056b3; }
+        .flex-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .checkbox-group { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; cursor: pointer; margin-top: 5px; }
+        .tip { font-size: 12px; color: #ff4757; font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+<div id="container">
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <div id="controls">
+        <div style="font-size: 15px; font-weight: bold; color: #007bff;">大肥鱼的终极模拟器 🐟</div>
+        <div class="tip">💡 滚轮缩放画面，拖拽空白处平移，拖动红球改变位置</div>
+        
+        <!-- 质量 -->
+        <div class="control-group">
+            <label><span>质量 m:</span> <span id="m-val">1.0</span></label>
+            <div class="unit-row">
+                <input type="range" id="m-slider" min="0.2" max="5.0" step="0.1" value="1.0">
+                <select id="m-unit">
+                    <option value="kg">kg</option>
+                    <option value="g">g</option>
+                    <option value="lb">lb</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 绳长 -->
+        <div class="control-group">
+            <label><span>绳长 L:</span> <span id="L-val">2.0</span></label>
+            <div class="unit-row">
+                <input type="range" id="L-slider" min="0.5" max="4.0" step="0.1" value="2.0">
+                <select id="L-unit">
+                    <option value="m">m</option>
+                    <option value="cm">cm</option>
+                    <option value="ft">ft</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 初速度 -->
+        <div class="control-group">
+            <label><span>初速度 V₀:</span> <span id="v0-val">5.0</span></label>
+            <div class="unit-row">
+                <input type="range" id="v0-slider" min="0" max="15" step="0.1" value="5.0">
+                <select id="v-unit">
+                    <option value="m/s">m/s</option>
+                    <option value="km/h">km/h</option>
+                    <option value="mph">mph</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 重力加速度 -->
+        <div class="control-group">
+            <label><span>重力 g:</span> <span id="g-val">9.8</span></label>
+            <div class="unit-row">
+                <input type="range" id="g-slider" min="1" max="20" step="0.1" value="9.8">
+                <span style="font-size:12px; width:50px; text-align:right; color:#666;">m/s²</span>
+            </div>
+        </div>
+
+        <!-- 时间 -->
+        <div class="control-group">
+            <label><span>时间 t:</span> <span id="t-val">0.00</span></label>
+            <div class="unit-row">
+                <input type="range" id="t-slider" min="0" max="5" step="0.01" value="0">
+                <span style="font-size:12px; width:50px; text-align:right; color:#666;">s</span>
+            </div>
+        </div>
+
+        <div class="flex-row">
+            <button id="play-btn">▶ 播放</button>
+            <button id="reset-btn">↺ 重置</button>
+            <button id="fit-btn">🔍 适配屏幕</button>
+        </div>
+        
+        <div class="checkbox-group">
+            <input type="checkbox" id="show-force-split" checked>
+            <label for="show-force-split">显示重力正交分解</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="show-velocity-split" checked>
+            <label for="show-velocity-split">显示速度切/径向分解</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="show-radius" checked>
+            <label for="show-radius">显示半径标注</label>
+        </div>
+
+        <div id="stats">
+            <strong>实时物理数据:</strong><br>
+            速率 v: <span id="stat-v">0.00</span><br>
+            切向速度 v_t: <span id="stat-vt">0.00</span><br>
+            径向速度 v_r: <span id="stat-vr">0.00</span><br>
+            切向力 F_t: <span id="stat-Ft">0.00</span><br>
+            径向力 F_r: <span id="stat-Fr">0.00</span><br>
+            切向加速度 a_t: <span id="stat-at">0.00</span><br>
+            径向加速度 a_r: <span id="stat-ar">0.00</span><br>
+            绳子张力 T: <span id="stat-T">0.00</span><br>
+            重力 mg: <span id="stat-mg">0.00</span><br>
+            <span id="stat-state" style="color: green;">状态: 圆周运动</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI 元素
+    const mSlider = document.getElementById('m-slider'), LSlider = document.getElementById('L-slider');
+    const v0Slider = document.getElementById('v0-slider'), gSlider = document.getElementById('g-slider');
+    const tSlider = document.getElementById('t-slider'), playBtn = document.getElementById('play-btn');
+    const resetBtn = document.getElementById('reset-btn'), fitBtn = document.getElementById('fit-btn');
+    const showForceSplit = document.getElementById('show-force-split');
+    const showVelocitySplit = document.getElementById('show-velocity-split');
+    const showRadius = document.getElementById('show-radius');
+
+    // 单位切换元素
+    const mUnit = document.getElementById('m-unit');
+    const LUnit = document.getElementById('L-unit');
+    const vUnit = document.getElementById('v-unit');
+
+    // 物理参数（内部始终用国际单位制计算）
+    let m = 1.0, L = 2.0, v0 = 5.0, g = 9.8; // kg, m, m/s, m/s²
+    
+    // 视图控制 (平移与缩放)
+    let viewZoom = 1.0;
+    let panX = 0, panY = 0;
+    const originX = 300, originY = 300; // 画布中心坐标
+    let baseScale = 250 / L;
+    
+    // 状态变量
+    let time = 0, isPlaying = false, state = 'circular', theta = 0, omega = 0;
+    let x = 0, y = 0, vx = 0, vy = 0, T = 0, lastTimestamp = 0, dt = 0.005;
+
+    // 拖拽状态
+    let isDraggingBall = false;
+    let isPanning = false;
+    let lastMouseX = 0, lastMouseY = 0;
+
+    // 单位换算因子
+    const conv = {
+        m: { kg: 1, g: 0.001, lb: 0.453592 },
+        L: { m: 1, cm: 0.01, ft: 0.3048 },
+        v: { 'm/s': 1, 'km/h': 1/3.6, 'mph': 0.44704 },
+        T: { 'N': 1, 'kgf': 9.80665, 'lbf': 4.44822 }
+    };
+
+    const suffix = {
+        m: { kg: ' kg', g: ' g', lb: ' lb' },
+        L: { m: ' m', cm: ' cm', ft: ' ft' },
+        v: { 'm/s': ' m/s', 'km/h': ' km/h', 'mph': ' mph' },
+        T: { 'N': ' N', 'kgf': ' kgf', 'lbf': ' lbf' }
+    };
+
+    function formatValue(val, type) {
+        let unit = '';
+        let factor = 1;
+        if (type === 'm') { unit = mUnit.value; factor = 1 / conv.m[unit]; }
+        else if (type === 'L') { unit = LUnit.value; factor = 1 / conv.L[unit]; }
+        else if (type === 'v') { unit = vUnit.value; factor = 1 / conv.v[unit]; }
+        else if (type === 'T') { unit = 'N'; factor = 1; }
+        
+        let converted = val * factor;
+        return converted.toFixed(2) + suffix[type][unit];
+    }
+
+    function resetSim() {
+        time = 0; state = 'circular'; theta = 0; omega = v0 / L;
+        x = L * Math.sin(theta); y = L * Math.cos(theta);
+        vx = omega * L; vy = 0; tSlider.value = 0; updateUI(); draw();
+    }
+
+    function stepPhysics(dt) {
+        if (state === 'circular') {
+            let k1_theta = omega, k1_omega = -(g / L) * Math.sin(theta);
+            let k2_theta = omega + 0.5 * dt * k1_omega, k2_omega = -(g / L) * Math.sin(theta + 0.5 * dt * k1_theta);
+            let k3_theta = omega + 0.5 * dt * k2_omega, k3_omega = -(g / L) * Math.sin(theta + 0.5 * dt * k2_theta);
+            let k4_theta = omega + dt * k3_omega, k4_omega = -(g / L) * Math.sin(theta + dt * k3_theta);
+            theta += (dt / 6) * (k1_theta + 2*k2_theta + 2*k3_theta + k4_theta);
+            omega += (dt / 6) * (k1_omega + 2*k2_omega + 2*k3_omega + k4_omega);
+            
+            T = m * (omega * L) * (omega * L) / L + m * g * Math.cos(theta);
+            if (T < 0) {
+                state = 'projectile';
+                x = L * Math.sin(theta); y = L * Math.cos(theta);
+                vx = omega * L * Math.cos(theta); vy = -omega * L * Math.sin(theta); T = 0;
+            } else {
+                x = L * Math.sin(theta); y = L * Math.cos(theta);
+            }
+        } else if (state === 'projectile') {
+            let vx_new = vx, vy_new = vy + g * dt;
+            x = x + vx * dt + 0.5 * 0 * dt * dt; y = y + vy * dt + 0.5 * g * dt * dt;
+            vx = vx_new; vy = vy_new; T = 0;
+            let dist = Math.sqrt(x*x + y*y);
+            if (dist >= L) {
+                let angle = Math.atan2(x, y);
+                let v_tangential = vx * Math.cos(angle) - vy * Math.sin(angle);
+                x = L * Math.sin(angle); y = L * Math.cos(angle);
+                theta = angle; omega = v_tangential / L;
+                vx = v_tangential * Math.cos(angle); vy = -v_tangential * Math.sin(angle);
+                state = 'circular';
+            }
+        }
+    }
+
+    function fastForward(targetTime) {
+        resetSim(); let currentTime = 0;
+        while (currentTime < targetTime && currentTime < 5.0) { stepPhysics(dt); currentTime += dt; }
+        time = targetTime;
+    }
+
+    function updateUI() {
+        let v, vt, vr, Ft, Fr, at, ar, mg = m * g;
+        if (state === 'circular') {
+            v = Math.abs(omega * L); vt = v; vr = 0;
+            Fr = T - mg * Math.cos(theta); Ft = -mg * Math.sin(theta);
+            at = Ft / m; ar = Fr / m;
+        } else {
+            v = Math.sqrt(vx*vx + vy*vy);
+            let angle = Math.atan2(x, y);
+            vr = vx * Math.sin(angle) + vy * Math.cos(angle);
+            vt = vx * Math.cos(angle) - vy * Math.sin(angle);
+            Fr = -mg * Math.cos(angle); Ft = mg * Math.sin(angle);
+            at = Ft / m; ar = Fr / m;
+        }
+        document.getElementById('stat-v').innerText = formatValue(v, 'v');
+        document.getElementById('stat-vt').innerText = formatValue(vt, 'v');
+        document.getElementById('stat-vr').innerText = formatValue(vr, 'v');
+        document.getElementById('stat-Ft').innerText = formatValue(Ft, 'T');
+        document.getElementById('stat-Fr').innerText = formatValue(Fr, 'T');
+        document.getElementById('stat-at').innerText = at.toFixed(2) + ' m/s²';
+        document.getElementById('stat-ar').innerText = ar.toFixed(2) + ' m/s²';
+        document.getElementById('stat-T').innerText = formatValue(T, 'T');
+        document.getElementById('stat-mg').innerText = formatValue(mg, 'T');
+        
+        let stateEl = document.getElementById('stat-state');
+        stateEl.innerText = state === 'circular' ? "状态: 圆周运动" : "状态: 抛体运动 (绳子松弛)";
+        stateEl.style.color = state === 'circular' ? 'green' : 'red';
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.save();
+        ctx.translate(panX, panY);
+        ctx.scale(viewZoom, viewZoom);
+
+        let currentScale = (250 / L) * viewZoom;
+
+        // 画圆心
+        ctx.beginPath(); ctx.arc(originX, originY, 5, 0, 2*Math.PI); ctx.fillStyle = '#333'; ctx.fill();
+        ctx.fillText("O", originX - 15, originY - 15);
+
+        // 画圆周虚线
+        let pixelRadius = L * currentScale;
+        ctx.beginPath(); ctx.arc(originX, originY, pixelRadius, 0, 2*Math.PI); 
+        ctx.strokeStyle = '#ddd'; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+
+        // 计算屏幕坐标
+        let screenX = originX + x * currentScale, screenY = originY + y * currentScale;
+
+        // 绘制半径标注
+        if (showRadius.checked) {
+            ctx.beginPath(); 
+            ctx.moveTo(originX, originY); 
+            ctx.lineTo(screenX, screenY);
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            let midX = (originX + screenX) / 2, midY = (originY + screenY) / 2;
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(`L = ${formatValue(L, 'L')}`, midX + 10, midY - 10);
+        }
+
+        // 画绳子
+        ctx.beginPath(); ctx.moveTo(originX, originY); ctx.lineTo(screenX, screenY);
+        ctx.strokeStyle = state === 'circular' ? '#333' : '#aaa'; ctx.lineWidth = 2; ctx.stroke();
+
+        // 画小球
+        let ballRadius = 8 + m * 1.5;
+        ctx.beginPath(); ctx.arc(screenX, screenY, ballRadius, 0, 2*Math.PI);
+        ctx.fillStyle = isDraggingBall ? '#ffa502' : (state === 'circular' ? '#ff4757' : '#ffa502'); 
+        ctx.fill();
+        ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+
+        // ★ 核心修改：拉长箭头的缩放系数 (从 3.5 改为 6.0)
+        let arrowScale = 6.0 / m; 
+        let mg = m * g;
+
+        if (state === 'circular') {
+            drawArrow(screenX, screenY, 0, mg * arrowScale, 'green', 'mg');
+            let dirX = -Math.sin(theta), dirY = -Math.cos(theta);
+            if (T > 0) drawArrow(screenX, screenY, dirX * T * arrowScale, dirY * T * arrowScale, 'purple', 'T');
+
+            if (showForceSplit.checked) {
+                let Fg_radial_mag = mg * Math.cos(theta);
+                let Fg_tangential_mag = mg * Math.sin(theta);
+                let radDirX = Math.sin(theta), radDirY = Math.cos(theta); 
+                drawArrow(screenX, screenY, radDirX * Fg_radial_mag * arrowScale, radDirY * Fg_radial_mag * arrowScale, 'rgba(0,128,0,0.5)', 'mg·cosθ');
+                let tanDirX = Math.cos(theta), tanDirY = -Math.sin(theta);
+                drawArrow(screenX, screenY, tanDirX * Fg_tangential_mag * arrowScale, tanDirY * Fg_tangential_mag * arrowScale, 'rgba(0,128,0,0.5)', 'mg·sinθ');
+            }
+            if (showVelocitySplit.checked) {
+                let v = Math.abs(omega * L);
+                let vx_vec = v * Math.cos(theta), vy_vec = -v * Math.sin(theta);
+                // ★ 核心修改：速度箭头系数从 0.6 改为 0.9
+                drawArrow(screenX, screenY, vx_vec * arrowScale * 0.9, vy_vec * arrowScale * 0.9, 'blue', 'v_t');
+            }
+        } else {
+            drawArrow(screenX, screenY, 0, mg * arrowScale, 'green', 'mg');
+            if (showVelocitySplit.checked) {
+                let angle = Math.atan2(x, y);
+                let v = Math.sqrt(vx*vx + vy*vy);
+                let vr = vx * Math.sin(angle) + vy * Math.cos(angle);
+                let vt = vx * Math.cos(angle) - vy * Math.sin(angle);
+                // ★ 核心修改：速度箭头系数从 0.6 改为 0.9
+                drawArrow(screenX, screenY, Math.sin(angle) * vr * arrowScale * 0.9, Math.cos(angle) * vr * arrowScale * 0.9, 'rgba(0,0,255,0.5)', 'v_r');
+                drawArrow(screenX, screenY, Math.cos(angle) * vt * arrowScale * 0.9, -Math.sin(angle) * vt * arrowScale * 0.9, 'blue', 'v_t');
+            }
+        }
+        
+        ctx.restore();
+    }
+
+    function drawArrow(fromX, fromY, dx, dy, color, label) {
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+        let toX = fromX + dx, toY = fromY + dy;
+        ctx.beginPath(); ctx.moveTo(fromX, fromY); ctx.lineTo(toX, toY);
+        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+        let angle = Math.atan2(dy, dx), headlen = 8;
+        ctx.beginPath(); ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(toX, toY); ctx.fillStyle = color; ctx.fill();
+        if (label) { ctx.fillStyle = color; ctx.font = "bold 11px Arial"; ctx.fillText(label, toX + 5, toY - 5); }
+    }
+
+    function updateSliderLabels() {
+        document.getElementById('m-val').innerText = formatValue(m, 'm');
+        document.getElementById('L-val').innerText = formatValue(L, 'L');
+        document.getElementById('v0-val').innerText = formatValue(v0, 'v');
+        document.getElementById('g-val').innerText = g.toFixed(1) + ' m/s²';
+        document.getElementById('t-val').innerText = time.toFixed(2) + ' s';
+    }
+
+    function animate(timestamp) {
+        if (!lastTimestamp) lastTimestamp = timestamp;
+        let elapsed = (timestamp - lastTimestamp) / 1000; lastTimestamp = timestamp;
+        if (isPlaying && !isDraggingBall && !isPanning) {
+            if (time + elapsed > 5) { time = 5; isPlaying = false; playBtn.innerText = '▶ 播放'; }
+            else {
+                let timeToSimulate = elapsed;
+                while (timeToSimulate > 0) {
+                    let step = Math.min(dt, timeToSimulate); stepPhysics(step); timeToSimulate -= step; time += step;
+                }
+                tSlider.value = time;
+            }
+            updateSliderLabels(); updateUI(); draw();
+        }
+        requestAnimationFrame(animate);
+    }
+
+    function handleSliderChange() {
+        m = parseFloat(mSlider.value); L = parseFloat(LSlider.value);
+        v0 = parseFloat(v0Slider.value); g = parseFloat(gSlider.value);
+        updateSliderLabels();
+        if(!isPlaying) { fastForward(time); updateUI(); draw(); }
+    }
+    
+    [mSlider, LSlider, v0Slider, gSlider].forEach(el => el.addEventListener('input', handleSliderChange));
+    [mUnit, LUnit, vUnit].forEach(el => el.addEventListener('change', () => { updateSliderLabels(); updateUI(); draw(); }));
+
+    tSlider.addEventListener('input', (e) => {
+        time = parseFloat(e.target.value); updateSliderLabels(); fastForward(time); updateUI(); draw();
+    });
+    playBtn.addEventListener('click', () => {
+        if (time >= 5) resetSim();
+        isPlaying = !isPlaying; playBtn.innerText = isPlaying ? '⏸ 暂停' : '▶ 播放'; lastTimestamp = 0;
+    });
+    resetBtn.addEventListener('click', () => { isPlaying = false; playBtn.innerText = '▶ 播放'; resetSim(); });
+    
+    fitBtn.addEventListener('click', () => {
+        panX = 0; panY = 0; viewZoom = 1.0;
+        draw();
+    });
+
+    showForceSplit.addEventListener('change', draw);
+    showVelocitySplit.addEventListener('change', draw);
+    showRadius.addEventListener('change', draw);
+
+    // ================== 鼠标交互 ==================
+    function getCanvasPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        let clientX = e.clientX, clientY = e.clientY;
+        if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+        
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        let rawX = (clientX - rect.left) * scaleX;
+        let rawY = (clientY - rect.top) * scaleY;
+        
+        let unzoomedX = (rawX - panX) / viewZoom;
+        let unzoomedY = (rawY - panY) / viewZoom;
+        
+        return { rawX, rawY, unzoomedX, unzoomedY };
+    }
+
+    function startInteraction(e) {
+        const pos = getCanvasPos(e);
+        let currentScale = 250 / L;
+        let screenX = originX + x * currentScale;
+        let screenY = originY + y * currentScale;
+        let ballRadius = 8 + m * 1.5;
+        
+        const dist = Math.sqrt((pos.unzoomedX - screenX)**2 + (pos.unzoomedY - screenY)**2);
+        if (dist <= ballRadius + 15) {
+            isDraggingBall = true;
+            isPlaying = false;
+            playBtn.innerText = '▶ 播放';
+            e.preventDefault();
+        } else {
+            isPanning = true;
+            lastMouseX = pos.rawX;
+            lastMouseY = pos.rawY;
+            e.preventDefault();
+        }
+    }
+
+    function onInteraction(e) {
+        const pos = getCanvasPos(e);
+        
+        if (isDraggingBall) {
+            let currentScale = 250 / L;
+            const dx = pos.unzoomedX - originX;
+            const dy = pos.unzoomedY - originY;
+            theta = Math.atan2(dx, dy); 
+            
+            x = L * Math.sin(theta);
+            y = L * Math.cos(theta);
+            omega = 0; vx = 0; vy = 0;
+            time = 0; tSlider.value = 0;
+            
+            updateUI(); draw(); e.preventDefault();
+        } else if (isPanning) {
+            const dx = pos.rawX - lastMouseX;
+            const dy = pos.rawY - lastMouseY;
+            panX += dx;
+            panY += dy;
+            lastMouseX = pos.rawX;
+            lastMouseY = pos.rawY;
+            draw(); e.preventDefault();
+        }
+    }
+
+    function stopInteraction() {
+        if (isDraggingBall) { isDraggingBall = false; playBtn.innerText = '▶ 播放'; }
+        if (isPanning) { isPanning = false; }
+    }
+
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        viewZoom = Math.max(0.2, Math.min(5.0, viewZoom * zoomFactor));
+        draw();
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', startInteraction);
+    window.addEventListener('mousemove', onInteraction);
+    window.addEventListener('mouseup', stopInteraction);
+    
+    canvas.addEventListener('touchstart', startInteraction, { passive: false });
+    window.addEventListener('touchmove', onInteraction, { passive: false });
+    window.addEventListener('touchend', stopInteraction);
+
+    resetSim(); 
+    requestAnimationFrame(animate);
+</script>
+</body>
+</html>
